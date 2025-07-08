@@ -1,0 +1,84 @@
+version: '3.8'
+
+services:
+  twilio-webhook:
+    build: .
+    container_name: twilio-webhook-app
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+    env_file:
+      - .env
+    volumes:
+      # Mount logs directory for persistent logging
+      - ./logs:/app/logs
+    restart: unless-stopped
+    networks:
+      - twilio-network
+    depends_on:
+      - redis
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Optional: Redis for session storage/caching
+  redis:
+    image: redis:7-alpine
+    container_name: twilio-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+    networks:
+      - twilio-network
+    command: redis-server --appendonly yes
+
+  # Optional: MongoDB for call logs
+  mongodb:
+    image: mongo:6
+    container_name: twilio-mongodb
+    ports:
+      - "27017:27017"
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=admin
+      - MONGO_INITDB_ROOT_PASSWORD=password
+    volumes:
+      - mongo-data:/data/db
+    restart: unless-stopped
+    networks:
+      - twilio-network
+
+  # Development service with hot reload
+  twilio-webhook-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: twilio-webhook-dev
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - PORT=3000
+    env_file:
+      - .env
+    volumes:
+      - .:/app
+      - /app/node_modules
+    restart: unless-stopped
+    networks:
+      - twilio-network
+    profiles:
+      - development
+
+volumes:
+  redis-data:
+  mongo-data:
+
+networks:
+  twilio-network:
+    driver: bridge
